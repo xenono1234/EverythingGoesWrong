@@ -18,9 +18,9 @@ TagManager:
   - UI
   - Interactable
   - Wall
-  - Monster
-  - 
-  - 
+  - Player
+  - playermarker
+  - CCTV
   - 
   - 
   - 

@@ -20,15 +20,96 @@ public class MasterGamePlan : MonoBehaviour
     public TMP_Text reactorCountdownText;
     public TMP_Text monsterCountdownText;
 
+    // Research mechanic variables
+    [Tooltip("Time in minutes that the player must spend inside the control room to complete research.")]
+    public float researchDurationMinutes = 3f; // X minutes for research
+    public TMP_Text researchTimerText;
+    [Tooltip("Reference to the player GameObject.")]
+    public GameObject player;
+
+    // New game objects:
+    [Tooltip("Game object to be activated after research is complete.")]
+    public GameObject researchReward;
+    [Tooltip("Bonus game object to be enabled when the player enters the research reward's collider.")]
+    public GameObject bonusObject;
+
+    private float researchTimeRemaining;
+    private bool isPlayerInControlRoom = false;
+    private bool researchCompleted = false;
+    private bool bonusActivated = false;
+
     private void Start()
     {
+        // Initialize reactor and monster texts.
         if (reactorCountdownText != null)
             reactorCountdownText.text = "Reactor is ok";
         if (monsterCountdownText != null)
             monsterCountdownText.text = "Monster is happy";
 
+        // Initialize research timer (convert minutes to seconds).
+        researchTimeRemaining = researchDurationMinutes * 60f;
+        if (researchTimerText != null)
+            researchTimerText.text = researchDurationMinutes + " mins left for completing research";
+
+        // Ensure new game objects are inactive at the start.
+        if (researchReward != null)
+            researchReward.SetActive(false);
+        if (bonusObject != null)
+            bonusObject.SetActive(false);
+
         StartCoroutine(ReactorCycle());
         StartCoroutine(MonsterCycle());
+    }
+
+    private void Update()
+    {
+        if (researchTimerText == null)
+            return;
+
+        // Update the research timer if research is still in progress.
+        if (researchTimeRemaining > 0)
+        {
+            int minutesLeft = Mathf.FloorToInt(researchTimeRemaining / 60f);
+            int secondsLeft = Mathf.FloorToInt(researchTimeRemaining % 60f);
+
+            if (isPlayerInControlRoom)
+            {
+                researchTimerText.text = minutesLeft + " mins " + secondsLeft + " secs left for completing research";
+                researchTimeRemaining -= Time.deltaTime;
+                if (researchTimeRemaining < 0)
+                    researchTimeRemaining = 0;
+            }
+            else
+            {
+                researchTimerText.text = "To continue research, go into the control area. " 
+                    + minutesLeft + " mins " + secondsLeft + " secs left.";
+            }
+        }
+        else
+        {
+            researchTimerText.text = "Research complete!";
+            if (!researchCompleted)
+            {
+                researchCompleted = true;
+                if (researchReward != null)
+                {
+                    researchReward.SetActive(true);
+                    Debug.Log("Research reward activated.");
+                }
+            }
+        }
+
+        // Check if the player has entered the researchReward's collider to enable bonusObject.
+        if (researchCompleted && !bonusActivated && researchReward != null && bonusObject != null)
+        {
+            Collider rewardCollider = researchReward.GetComponent<Collider>();
+            if (rewardCollider != null && rewardCollider.bounds.Contains(player.transform.position))
+            {
+                bonusActivated = true;
+                bonusObject.SetActive(true);
+                Debug.Log("Player entered research reward area. Bonus object activated.");
+            }
+        }
     }
 
     // Reactor cycle: safe period, problem period, then reset.
@@ -36,13 +117,11 @@ public class MasterGamePlan : MonoBehaviour
     {
         while (true)
         {
-            // Safe state
             float safeTime = Random.Range(reactorSafeTimeMin, reactorSafeTimeMax);
             if (reactorCountdownText != null)
                 reactorCountdownText.text = "Reactor is ok";
             yield return new WaitForSeconds(safeTime);
 
-            // Reactor goes bad
             SetReactorState(true);
             float timeRemaining = reactorCountdownTime;
             while (timeRemaining > 0)
@@ -52,7 +131,6 @@ public class MasterGamePlan : MonoBehaviour
                 yield return new WaitForSeconds(1f);
                 timeRemaining--;
 
-                // Reactor fixed before explosion
                 if (!reactor.IsMalfunctioning)
                 {
                     if (reactorCountdownText != null)
@@ -71,7 +149,6 @@ public class MasterGamePlan : MonoBehaviour
                 reactor.Explode();
                 yield return new WaitForSeconds(2f);
             }
-            // Reset reactor for next cycle.
             SetReactorState(false);
         }
     }
@@ -86,7 +163,6 @@ public class MasterGamePlan : MonoBehaviour
                 monsterCountdownText.text = "Monster is happy";
             yield return new WaitForSeconds(safeTime);
 
-            // Monster becomes angry
             SetMonsterMood(true);
             float timeRemaining = monsterCountdownTime;
             while (timeRemaining > 0)
@@ -96,7 +172,6 @@ public class MasterGamePlan : MonoBehaviour
                 yield return new WaitForSeconds(1f);
                 timeRemaining--;
 
-                // Monster fed before escape
                 if (!monster.IsAngry)
                 {
                     if (monsterCountdownText != null)
@@ -115,7 +190,6 @@ public class MasterGamePlan : MonoBehaviour
                 monster.Attack();
                 yield return new WaitForSeconds(2f);
             }
-            // Reset monster for next cycle.
             SetMonsterMood(false);
         }
     }
@@ -128,7 +202,10 @@ public class MasterGamePlan : MonoBehaviour
             monster.SetMood(angry);
             Debug.Log("Monster: " + (angry ? "Angry" : "Happy"));
         }
-        else Debug.LogWarning("MonsterController missing.");
+        else
+        {
+            Debug.LogWarning("MonsterController missing.");
+        }
     }
 
     // Directly sets reactor state.
@@ -139,6 +216,29 @@ public class MasterGamePlan : MonoBehaviour
             reactor.SetReactorState(malfunction);
             Debug.Log("Reactor: " + (malfunction ? "Bad" : "Ok"));
         }
-        else Debug.LogWarning("ReactorController missing.");
+        else
+        {
+            Debug.LogWarning("ReactorController missing.");
+        }
+    }
+
+    // Detect when the player enters the control room trigger.
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.gameObject == player)
+        {
+            isPlayerInControlRoom = true;
+            Debug.Log("Player entered the control area.");
+        }
+    }
+
+    // Detect when the player exits the control room trigger.
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.gameObject == player)
+        {
+            isPlayerInControlRoom = false;
+            Debug.Log("Player left the control area.");
+        }
     }
 }
